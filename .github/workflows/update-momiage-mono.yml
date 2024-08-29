@@ -1,0 +1,76 @@
+name: Update Momiage Mono Cask
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # 毎日0時に実行
+  workflow_dispatch:
+
+permissions:
+  contents: write  # リポジトリの内容を変更するための権限
+
+jobs:
+  update-momiage-mono:
+    runs-on: macos-latest
+    steps:
+      - name: リポジトリをチェックアウト
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # 全てのコミットを取得
+
+      - name: 最新リリース情報を取得
+        id: get_release
+        run: |
+          # GitHub API から最新リリース情報を取得
+          response=$(curl -sL https://api.github.com/repos/kb10uy/MomiageMono/releases/latest)
+      
+          # タグ名を取得
+          tag_name=$(echo "$response" | jq -r .tag_name)
+          version=${tag_name#v}
+      
+          # アセットの URL を取得
+          asset_url=$(echo "$response" | jq -r --arg version "$version" '.assets[]? | select(.name == ("MomiageMono-" + $version + ".zip")) | .browser_download_url')
+      
+          # アセットの URL が取得できなかった場合、手動で構築
+          if [ -z "$asset_url" ]; then
+            echo "api is  not working, so use manual url (http mode)"
+            asset_url="https://github.com/kb10uy/MomiageMono/releases/download/${tag_name}/MomiageMono-${version}.zip"
+          fi
+      
+          # 出力
+          echo "version=$version" >> $GITHUB_OUTPUT
+          echo "asset_url=$asset_url" >> $GITHUB_OUTPUT
+  
+      - name: SHA256 を計算
+        id: compute_sha
+        run: |
+          if ! curl -sL --retry 3 --retry-delay 5 "${{ steps.get_release.outputs.asset_url }}" -o MomiageMono.zip; then
+            echo "Error: Failed to download MomiageMono.zip from ${{ steps.get_release.outputs.asset_url }}"
+            exit 1
+          fi
+
+          sha256=$(shasum -a 256 MomiageMono.zip | awk '{print $1}')
+          echo "sha256=$sha256" >> $GITHUB_OUTPUT
+
+      - name: Cask ファイルを更新
+        run: |
+          sed -i '' "s/^  version \".*\"/  version \"${{ steps.get_release.outputs.version }}\"/" Casks/momiage-mono.rb
+          sed -i '' "s/^  sha256 \".*\"/  sha256 \"${{ steps.compute_sha.outputs.sha256 }}\"/" Casks/momiage-mono.rb
+
+      - name: 変更があるか確認
+        id: check_diff
+        run: |
+          if git diff --quiet Casks/momiage-mono.rb; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 変更をコミットしてプッシュ
+        if: steps.check_diff.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add Casks/momiage-mono.rb
+          git commit -m "Updated momiage-mono.rb to version ${{ steps.get_release.outputs.version }}"
+          git pull origin --rebase
+          git push --force-with-lease
