@@ -2,11 +2,11 @@ name: Update Momiage Mono Cask
 
 on:
   schedule:
-    - cron: '0 0 * * *'  # 毎日0時に実行
+    - cron: '0 0 * * *'
   workflow_dispatch:
 
 permissions:
-  contents: write  # リポジトリの内容を変更するための権限
+  contents: write
 
 jobs:
   update-momiage-mono:
@@ -15,31 +15,31 @@ jobs:
       - name: リポジトリをチェックアウト
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0  # 全てのコミットを取得
+          fetch-depth: 0
 
       - name: 最新リリース情報を取得
         id: get_release
         run: |
-          # GitHub API から最新リリース情報を取得
-          response=$(curl -sL https://api.github.com/repos/kb10uy/MomiageMono/releases/latest)
-      
-          # タグ名を取得
+          response=$(curl -sL "https://api.github.com/repos/kb10uy/MomiageMono/releases/latest")
+
+          # タグ名（バージョン）をそのまま使用
           tag_name=$(echo "$response" | jq -r .tag_name)
           version=${tag_name#v}
-      
-          # アセットの URL を取得
-          asset_url=$(echo "$response" | jq -r --arg version "$version" '.assets[]? | select(.name == ("MomiageMono-" + $version + ".zip")) | .browser_download_url')
-      
-          # アセットの URL が取得できなかった場合、手動で構築
+
+          # アセットURLを取得。ただしバージョン番号にハイフンが含まれているため注意。
+          asset_url=$(echo "$response" | jq -r '.assets[] | select(.name | contains("MomiageMono")) | .browser_download_url')
+
+          # 取得できなかった場合のURL生成（fallback）
           if [ -z "$asset_url" ]; then
-            echo "api is  not working, so use manual url (http mode)"
-            asset_url="https://github.com/kb10uy/MomiageMono/releases/download/${tag_name}/MomiageMono-${version}.zip"
+            echo "API didn't return asset URL. Using fallback URL."
+            asset_url="https://github.com/kb10uy/MomiageMono/releases/download/${tag_name}/MomiageMono-${tag_name}.zip"
           fi
-      
+
           # 出力
           echo "version=$version" >> $GITHUB_OUTPUT
+          echo "tag_name=$tag_name" >> $GITHUB_OUTPUT
           echo "asset_url=$asset_url" >> $GITHUB_OUTPUT
-  
+
       - name: SHA256 を計算
         id: compute_sha
         run: |
