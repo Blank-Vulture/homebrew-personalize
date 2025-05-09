@@ -19,28 +19,34 @@ jobs:
 
       - name: 最新リリース情報を取得
         id: get_release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
           api_url="https://api.github.com/repos/kb10uy/MomiageMono/releases/latest"
-          response=$(curl -sL --retry 3 --retry-delay 5 "$api_url")
+          response=$(curl -sL --retry 3 --retry-delay 5 -H "Authorization: token ${{ secrets.GH_TOKEN }}" "$api_url")
           # レスポンスが空の場合は他のアプローチから取得
-          if [ -z "$response" ]; then
-            echo "Error: Failed to fetch release information from GitHub API, trying wget fallback."
-            response=$(wget -qO- "$api_url")
+          if [ -z "$response" ] || echo "$response" | grep -q "API rate limit exceeded"; then
+            echo "Error: Failed to fetch release information from GitHub API, trying without authentication."
+            response=$(curl -sL --retry 3 --retry-delay 5 "$api_url")
             if [ -z "$response" ]; then
-              echo "Error: Failed to fetch release information from wget fallback."
+              echo "Error: Failed to fetch release information. Exiting."
               exit 1
             fi
           fi
 
           # タグ名（バージョン）をそのまま使用
           tag_name=$(echo "$response" | jq -r '.tag_name')
+          if [ -z "$tag_name" ] || [ "$tag_name" = "null" ]; then
+            echo "Error: Could not extract tag_name from API response."
+            exit 1
+          fi
           version=$(echo "$tag_name" | sed 's/^v//')
 
           # アセットURLを取得。ただしバージョン番号にハイフンが含まれているため注意。
           asset_url=$(echo "$response" | jq -r '.assets[] | select(.name | contains("MomiageMono")) | .browser_download_url')
 
           # 取得できなかった場合のURL生成（fallback）
-          if [ -z "$asset_url" ]; then
+          if [ -z "$asset_url" ] || [ "$asset_url" = "null" ]; then
             echo "API didn't return asset URL. Using fallback URL."
             asset_url="https://github.com/kb10uy/MomiageMono/releases/download/${tag_name}/MomiageMono-${tag_name}.zip"
           fi
