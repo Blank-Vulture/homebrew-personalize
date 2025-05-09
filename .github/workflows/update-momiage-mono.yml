@@ -33,8 +33,8 @@ jobs:
           fi
 
           # タグ名（バージョン）をそのまま使用
-          tag_name=$(echo "$response" | jq -r .tag_name)
-          version=${tag_name#v}
+          tag_name=$(echo "$response" | jq -r '.tag_name')
+          version=$(echo "$tag_name" | sed 's/^v//')
 
           # アセットURLを取得。ただしバージョン番号にハイフンが含まれているため注意。
           asset_url=$(echo "$response" | jq -r '.assets[] | select(.name | contains("MomiageMono")) | .browser_download_url')

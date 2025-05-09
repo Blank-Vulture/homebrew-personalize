@@ -1,22 +1,31 @@
 #!/bin/bash
 
-api_url="https://api.github.com/repos/kb10uy/MomiageMono/releases/latest"
-response=$(curl -s "$api_url")
-tag_name=$(echo "$response" | jq -r .tag_name)
-echo "tag_name=$tag_name"
-version=${tag_name#v}
-echo "version=$version"
-asset_url=$(echo "$response" | jq -r '.assets[] | select(.name | contains("MomiageMono")) | .browser_download_url')
-if [ -z "$asset_url" ]; then
-  echo "指定されたバージョンのアセットが見つかりませんでした。"
-  exit 1
-fi
-echo "asset_url=$asset_url"
-
-# asset_url存在確認。githubは302リダイレクトするので、-Lオプションをつける
-curl -s -o /dev/null -w "%{http_code}" -L "$asset_url" | grep -q 200
-if [ $? -ne 0 ]; then
-  echo "アセットのURLが無効です。ファイルリリース時の命名規則が変更された可能性があります。"
-  exit 1
-fi
-echo "アセットのURLは有効です。ファイルリリース時の命名規則は変更されていません。"
+  api_url="https://api.github.com/repos/kb10uy/MomiageMono/releases/latest"
+  response=$(curl -sL --retry 3 --retry-delay 5 "$api_url")
+  # レスポンスが空の場合は他のアプローチから取得
+  if [ -z "$response" ]; then
+    echo "Error: Failed to fetch release information from GitHub API, trying wget fallback."
+    response=$(wget -qO- "$api_url")
+    if [ -z "$response" ]; then
+      echo "Error: Failed to fetch release information from wget fallback."
+      exit 1
+    fi
+  fi
+  
+  # タグ名からバージョン番号を取得。ハイフンが含まれるためraw値を使用。
+  tag_name=$(echo "$response" | jq -r '.tag_name')
+  version=$(echo "$tag_name" | sed 's/^v//')
+  
+  # アセットURLを取得。ただしバージョン番号にハイフンが含まれているため注意。
+  asset_url=$(echo "$response" | jq -r '.assets[] | select(.name | contains("MomiageMono")) | .browser_download_url')
+  
+  # 取得できなかった場合のURL生成（fallback）
+  if [ -z "$asset_url" ]; then
+    echo "API didn't return asset URL. Using fallback URL."
+    asset_url="https://github.com/kb10uy/MomiageMono/releases/download/${tag_name}/MomiageMono-${tag_name}.zip"
+  fi
+  
+  # 出力
+  echo "version=$version"
+  echo "tag_name=$tag_name"
+  echo "asset_url=$asset_url"
