@@ -1,6 +1,6 @@
 cask "drawpen" do
-  version "0.0.22"
-  sha256 "bbe9add0b9500c9a4cb99135781105ed23e303ba1594ca8520c48d0596a27f3d"
+  version "0.0.23"
+  sha256 "b40dd4c547fc2fbc9da9b3c06cbfe651d760dc9c62e7a39e171a9e997131402a"
 
   url "https://github.com/DmytroVasin/DrawPen/releases/download/v#{version}/DrawPen-#{version}-arm64.dmg",
       verified: "github.com/DmytroVasin/DrawPen/"
